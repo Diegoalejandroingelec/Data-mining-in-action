@@ -5,150 +5,21 @@ Created on Fri Sep  1 19:59:01 2023
 
 @author: diego
 """
-import os
+
 import pandas as pd 
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy import stats
 from sklearn.preprocessing import OneHotEncoder,LabelEncoder
-from utils import save_variable,find_pairs_of_features_based_on_correlation,visualize_data,drop_redundant_features,plot_attributes
+from utils import compute_statistics,compute_statistics_for_ratio_features,compute_statistics_for_nominal_features,check_for_model,save_variable,find_pairs_of_features_based_on_correlation,visualize_data,drop_redundant_features,label_encoder_for_quick_training
 from seaborn import heatmap
 from sklearn.ensemble import RandomForestRegressor 
 import category_encoders as ce
-from sklearn import preprocessing
 from joblib import dump, load
 
-def check_for_model(file_name):
-    if os.path.exists(file_name):
-        return True
-    else:
-        return False
-    
-def label_function(val):
-    return f'{val / 100 * len(df):.0f}\n{val:.0f}%'
 
-def compute_statistics_for_nominal_features(dataset,feature,statistical_description,correlation_with_the_target):
-    ### The most common value within this attribute
-    mode=dataset[feature].mode()[0]
-    ### Entropy of a variable is the measure of uncertainty if it is 0 it means that the variable is deterministic
-    entropy=stats.entropy(dataset[feature].replace(dataset[feature].unique(),list(range(len(dataset[feature].unique())))))
-    ### Chi-square test p-value that is less than or equal to your significance level indicates there is sufficient evidence to conclude that the observed distribution is not the same as the expected distribution
-    
-    p=chi_square_test(dataset,feature)
-    ### Correlation with TARGET
-    corr=correlation_with_the_target[feature]
-    
-    statistical_description[feature]={'Mode':mode,
-                                      'Entropy':entropy,
-                                      'Chi_square_test_p':p,
-                                      'Correlation':corr}
-    return statistical_description
-
-
-def compute_statistics(dataset,feature,statistical_description,correlation_with_the_target):
-
-    min_val= dataset[feature].min()
-    max_value= dataset[feature].max()
-    median=dataset[feature].median()
-    
-    #A percentile rank indicates the percentage of data points in a dataset that are less than or equal to a particular value.
-    #For example, the 25th percentile  represents the value below which 25% of the data points fall
-    P25=dataset[feature].quantile(0.25)
-    P50=dataset[feature].quantile(0.5)
-    P75=dataset[feature].quantile(0.75)
-    
-    corr=correlation_with_the_target[feature]
-    ### The most common value within this attribute
-    mode=dataset[feature].mode()[0]
-    
-    statistical_description[feature]={'Median':median,
-                                      'Min_value':min_val,
-                                      'Max_value':max_value,
-                                      'Correlation':corr,
-                                      'Mode':mode,
-                                      'P25':P25,
-                                      'P50':P50,
-                                      'P75':P75}
-    return statistical_description
-
-def compute_statistics_for_ratio_features(dataset,feature,statistical_description):
-    mean= dataset[feature].mean()
-    std= dataset[feature].std()
-    statistical_description[feature]['Mean']=mean
-    statistical_description[feature]['Standard_deviation']=std
-    return statistical_description
-    
-def chi_square_test(dataset,attribute,attribute2='TARGET'):
-    # Perform the chi-square test
-    
-    observed = pd.crosstab(dataset[attribute], dataset[attribute2])
-    print(f'TARGET VS {attribute}')
-    print(observed)
-    chi2, p, dof, expected = stats.chi2_contingency(observed)
-    
-    # Interpret the results
-   
-    print(f"P-Value: {p}")
-    
-    # significance level 
-    alpha = 0.05
-    
-    if p < alpha:
-        print(f"There is a significant association between {attribute} and TARGET.")
-    else:
-        print(f"There is no significant association between {attribute} and TARGET")
-        
-    return p
-
-    
-
-def plot_features_3D(f1,f2,f3,dataset,ag1=None, ag2=None):
-
-    dataset=dataset.sort_values(by=['TARGET'])
-    
-    fig = plt.figure(figsize=(12,8))
-    
-    ax = fig.add_subplot(111, projection='3d')
-    
-    color_dict = {0:'red', 1:'green'}
-    
-    names = dataset['TARGET'].unique()
-    
-    for s in names:
-        if s == 1:
-            l='No difficulties'
-        else:
-            l='Difficulties'
-        data = dataset.loc[dataset['TARGET'] == s]
-        sc = ax.scatter(data[f1], data[f2], data[f3], s=25,
-        c=[color_dict[i] for i in data['TARGET']], marker='x',  label=l)
-        plt.legend(loc=2, bbox_to_anchor=(1.05, 1))
-    if(ag1 and ag2):
-        ax.view_init(ag1, ag2)   
-    ax.set_xlabel(f1, rotation=150)
-    ax.set_ylabel(f2)
-    ax.set_zlabel(f3, rotation=60)
-    
-    
-    plt.show()    
-
-
-def label_encoder_for_quick_training(test_data, train_data, df):
-    
-    le = preprocessing.LabelEncoder()
-    for column_name in train_data.columns:
-        if train_data[column_name].dtype == object:
-            le.fit(df[column_name])
-            train_data[column_name] = le.transform(train_data[column_name])
-            test_data[column_name]= le.transform(test_data[column_name])                
-        else:
-            pass
-        
-    return train_data,test_data
-    
     
 df = pd.read_csv('loan_data_training.csv')
-
+number_of_features=8
 
 ###### ZERO or LOW VARIANCE ATTRIBUTES ##############
 
@@ -181,13 +52,16 @@ df=df.drop(['FLAG_DOCUMENT_2',
             'AMT_REQ_CREDIT_BUREAU_HOUR'],axis=1)
 
 ## zero variance
-df=df.drop(['FLAG_MOBIL', 'FLAG_DOCUMENT_12'], axis=1)
+df=df.drop(['FLAG_MOBIL',
+            'FLAG_DOCUMENT_12'], axis=1)
 
 
 ## irrelevant
 df=df.drop(['SK_ID_CURR'],axis=1)
 
 
+
+#Count missing values
 nan_count = df.isna().sum()
 
 print(nan_count)
@@ -195,9 +69,9 @@ print(nan_count)
 
 
 
-######################### Missing Values
+######################### MISSING VALUES
 
-
+## Reaplace nan with mode for categorical or discrete variables
 df['AMT_REQ_CREDIT_BUREAU_MON'].fillna(df['AMT_REQ_CREDIT_BUREAU_YEAR'].mode()[0], inplace=True)
 df['AMT_REQ_CREDIT_BUREAU_YEAR'].fillna(df['AMT_REQ_CREDIT_BUREAU_YEAR'].mode()[0], inplace=True)
 df['AMT_REQ_CREDIT_BUREAU_QRT'].fillna(df['AMT_REQ_CREDIT_BUREAU_QRT'].mode()[0], inplace=True)
@@ -209,16 +83,15 @@ df['DEF_30_CNT_SOCIAL_CIRCLE'].fillna(df['DEF_30_CNT_SOCIAL_CIRCLE'].mode()[0], 
 df['OBS_60_CNT_SOCIAL_CIRCLE'].fillna(df['OBS_60_CNT_SOCIAL_CIRCLE'].mode()[0], inplace=True)
 df['DEF_60_CNT_SOCIAL_CIRCLE'].fillna(df['DEF_60_CNT_SOCIAL_CIRCLE'].mode()[0], inplace=True)
 
+## Reaplace nan with mean for ratio or interval
 df['EXT_SOURCE_2'].fillna(df['EXT_SOURCE_2'].mean(), inplace=True)
 df['AMT_GOODS_PRICE'].fillna(df['AMT_GOODS_PRICE'].mean(), inplace=True)
 
-
+##Use random forest to predict missing values
 train_data = df.dropna().copy()
 test_data = df[df['EXT_SOURCE_3'].isnull()].copy()
 
-
 train_data,test_data=label_encoder_for_quick_training(test_data, train_data, df)
-    
 X_train= train_data.drop('EXT_SOURCE_3',axis=1)
 y_train= train_data['EXT_SOURCE_3']
 X_test= test_data.drop('EXT_SOURCE_3',axis=1)
@@ -242,6 +115,8 @@ predicted_values= model.predict(X_test)
 df.loc[df['EXT_SOURCE_3'].isnull(),'EXT_SOURCE_3']=predicted_values
 
 
+
+# Drop the rest of instances with nan
 df=df.dropna()
 nan_count = df.isna().sum()
 print(nan_count)
@@ -281,7 +156,7 @@ predicted_values= model.predict(X_test)
 df.loc[df['DAYS_EMPLOYED'] > 0,'DAYS_EMPLOYED']=predicted_values
 
 
-# FILTER OUTLIERS
+#### FILTER OUTLIERS
 
 #Filter outliers with AMT_INCOME_TOTAL greater than $800.000
 df=df[df['AMT_INCOME_TOTAL'] < 800000]
@@ -289,11 +164,11 @@ df=df[df['AMT_INCOME_TOTAL'] < 800000]
 
 
 
-for f in df.columns:
-    if  len(df[f].unique())>30 and f!='ORGANIZATION_TYPE': 
-        df[f].plot(kind = 'box').set_title(f)
-        plt.grid()
-        plt.show()
+# for f in df.columns:
+#     if  len(df[f].unique())>30 and f!='ORGANIZATION_TYPE': 
+#         df[f].plot(kind = 'box').set_title(f)
+#         plt.grid()
+#         plt.show()
 
 
 
@@ -301,7 +176,7 @@ for f in df.columns:
 
 
 
-############## Encoding categorical variables
+############## ENCODING CATEGORICAL VARIABLES
 
 
 df_new=df.copy()
@@ -334,15 +209,9 @@ for attribute in categorical:
         df_new=df_new.drop([attribute],axis=1)
         save_variable(f'{attribute}_onehot_encoder_11.pkl',encoder)
 
-# for f in df_new.columns:
-#     if  len(df_new[f].unique())<30: 
-#         df_new.groupby(f).size().plot(kind='pie', autopct=label_function, textprops={'fontsize': 8})
 
-#         plt.title(f)
-#         plt.grid()
-#         plt.show()
 
-############## Redundant Features Analysis 
+############## REDUNDANT FEATURE ANALYSIS
 
 correlation_matrix=df_new.corr()
 
@@ -383,22 +252,23 @@ visualize_data(low_correlated_attributes,
 
 
 
-number_of_features=8
+
 selected_features,correlation_with_the_target=drop_redundant_features(correlation_matrix,
-                                          high_correlated_attributes,number_of_features)
+                                                                      high_correlated_attributes,
+                                                                      number_of_features)
 
 
-A='DAYS_BIRTH'
-B='EXT_SOURCE_2'
-correlation_value=correlation_matrix.loc[A, B]
-plot_attributes(df_new[A],
-               df_new[B],
-                A,
-                B,
-                correlation_value,
-                df_new['TARGET'],
-                ['No Difficulties','Difficulties'],
-                )
+# A='DAYS_BIRTH'
+# B='EXT_SOURCE_2'
+# correlation_value=correlation_matrix.loc[A, B]
+# plot_attributes(df_new[A],
+#                df_new[B],
+#                 A,
+#                 B,
+#                 correlation_value,
+#                 df_new['TARGET'],
+#                 ['No Difficulties','Difficulties'],
+#                 )
 
 
 
@@ -427,17 +297,14 @@ plot_attributes(df_new[A],
 selected_features.append('TARGET')
 dataset=df_new[selected_features]
 
-#nan_count = dataset.isna().sum()
 
-#print(nan_count)
-
-#dataset=dataset.dropna()
 
 
 statistical_description={}
 
 
 ordinal_features=['REGION_RATING_CLIENT_W_CITY',]
+
 ratio_variables=['AMT_REQ_CREDIT_BUREAU_YEAR',
                  'OBS_30_CNT_SOCIAL_CIRCLE',
                  'DEF_30_CNT_SOCIAL_CIRCLE',
@@ -448,8 +315,28 @@ ratio_variables=['AMT_REQ_CREDIT_BUREAU_YEAR',
                  'DAYS_ID_PUBLISH',
                  'DAYS_LAST_PHONE_CHANGE',
                  'AMT_GOODS_PRICE',
-                 'DAYS_EMPLOYED']
-nominal=['FLAG_DOCUMENT_3','REG_CITY_NOT_WORK_CITY','REG_CITY_NOT_LIVE_CITY','FLAG_WORK_PHONE','FLAG_EMAIL']
+                 'DAYS_EMPLOYED',
+                 'CNT_CHILDREN',
+                 'AMT_INCOME_TOTAL',
+                 'AMT_CREDIT',
+                 'AMT_ANNUITY',
+                 'AMT_GOODS_PRICE']
+
+nominal=['FLAG_DOCUMENT_3',
+         'REG_CITY_NOT_WORK_CITY',
+         'REG_CITY_NOT_LIVE_CITY',
+         'FLAG_WORK_PHONE',
+         'FLAG_EMAIL',
+         'NAME_TYPE_SUITE',
+         'NAME_INCOME_TYPE',
+         'NAME_EDUCATION_TYPE',
+         'NAME_FAMILY_STATUS',
+         'NAME_HOUSING_TYPE',
+         'NAME_CONTRACT_TYPE',
+         'CODE_GENDER',
+         'FLAG_OWN_CAR',
+         'FLAG_OWN_REALTY',
+         'TARGET']
 
 for f in df_new.columns:
     if  len(df_new[f].unique())>30 and f!='ORGANIZATION_TYPE': 
@@ -460,16 +347,23 @@ for f in df_new.columns:
 
 
 
+def label_function(val):
+    return f'{val / 100 * len(df):.0f}\n{val:.0f}%'
 
-categorical=[]
 for feature in selected_features:
     try:
         if len(dataset[feature].unique())>50:
-            bins=int(len(dataset[feature].unique())/10)
+            bins=int(len(dataset[feature].unique())/50)
         else:
             bins=int(len(dataset[feature].unique()))
             
-        if(feature in nominal):
+        
+        
+        ordinal_features_match = [feature for item in ordinal_features if feature.startswith(item)]
+        ratio_variables_match = [feature for item in ratio_variables if feature.startswith(item)]
+        nominal_match = [feature for item in nominal if feature.startswith(item)]
+        
+        if(len(nominal_match)>=1):
             fig, (ax1, ax2) = plt.subplots(ncols=2, figsize=(10, 5))
             dataset.groupby(feature).size().plot(kind='pie', autopct=label_function, textprops={'fontsize': 8},
                                   colors=['tomato', 'gold', 'skyblue','green'], ax=ax1)
@@ -482,10 +376,6 @@ for feature in selected_features:
         else:
             dataset[feature].plot(kind='hist', bins=bins,title=feature,align='mid')
             plt.show()
-        
-        ordinal_features_match = [item for item in ordinal_features if item.startswith(feature)]
-        ratio_variables_match = [item for item in ratio_variables if item.startswith(feature)]
-        nominal_match = [item for item in nominal if item.startswith(feature)]
         
         if (len(ordinal_features_match)>=1) or (len(ratio_variables_match)>=1):
             statistical_description=compute_statistics(dataset,
@@ -505,23 +395,24 @@ for feature in selected_features:
         
                
     except:
+        print('error')
         #dataset.groupby(['NAME_INCOME_TYPE']).sum().plot(kind='pie', y='NAME_INCOME_TYPE', autopct='%1.0f%%')
 
-        fig, (ax1, ax2) = plt.subplots(ncols=2, figsize=(10, 5))
-        dataset.groupby(feature).size().plot(kind='pie', autopct=label_function, textprops={'fontsize': 8},
-                              colors=['tomato', 'gold', 'skyblue','green'], ax=ax1)
+        # fig, (ax1, ax2) = plt.subplots(ncols=2, figsize=(10, 5))
+        # dataset.groupby(feature).size().plot(kind='pie', autopct=label_function, textprops={'fontsize': 8},
+        #                       colors=['tomato', 'gold', 'skyblue','green'], ax=ax1)
         
-        dataset[feature].value_counts().plot(kind='bar',title=feature,ax=ax2)
-        ax1.set_ylabel('', size=8)
-        ax2.set_ylabel('Frequency', size=8)
-        plt.tight_layout()
-        plt.show()
+        # dataset[feature].value_counts().plot(kind='bar',title=feature,ax=ax2)
+        # ax1.set_ylabel('', size=8)
+        # ax2.set_ylabel('Frequency', size=8)
+        # plt.tight_layout()
+        # plt.show()
         
         
-        statistical_description=compute_statistics_for_nominal_features(dataset,
-                                                                        feature,
-                                                                        statistical_description,
-                                                                        correlation_with_the_target)
+        # statistical_description=compute_statistics_for_nominal_features(dataset,
+        #                                                                 feature,
+        #                                                                 statistical_description,
+        #                                                                 correlation_with_the_target)
 
         
 df_new[selected_features].to_csv('DATA_PROCESSED_11.csv', index=False)

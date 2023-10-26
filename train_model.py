@@ -34,7 +34,7 @@ from joblib import dump, load
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 
-from tensorflow.keras.layers import Dense, Dropout, BatchNormalization, Activation,PReLU
+from tensorflow.keras.layers import Dense, Dropout, BatchNormalization,PReLU
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import ReduceLROnPlateau
 
@@ -146,6 +146,10 @@ if(mode_==1):
         if (model_option == 1):
             model_file=f'svm_trained_{fold_}.joblib'
             # Call the contructor SVC (Support Vector Machine for Classification) to create the model
+            #with a large C, the model will focus on minimizing the classification error, even if this implies a small margin, which might generate overfitting.
+            #Conversely, with a small C, the algorithm will prioritize maximizing the margin, producing a more robust model that might generalize better for unseen data
+            
+            # A small gamma results in a smoother decision boundary, while a large gamma leads to a more localized and wiggly decision boundary
             model = SVC(C=1.0,
                         kernel='rbf',
                         gamma='scale',
@@ -158,6 +162,9 @@ if(mode_==1):
         elif(model_option == 2):
             model_file=f'decision_tree_trained_{fold_}.joblib'
             # Call the constructor DecisionTreeClassifier() to create the model
+            #The algorithm selects the best possible feature and threshold to split the data based on the chosen criterion
+            #min_samples_split: This parameter specifies the minimum number of samples required to perform a split at a node
+            #min_samples_leaf: This parameter defines the minimum number of samples required in a leaf node
             model = DecisionTreeClassifier(criterion='entropy',
                                            splitter='best',
                                            max_depth=20,

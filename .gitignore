@@ -5,7 +5,8 @@ __pycache__/
 
 # C extensions
 *.so
-
+*.pkl
+*.csv
 # Distribution / packaging
 .Python
 build/
@@ -14,6 +15,7 @@ dist/
 downloads/
 eggs/
 .eggs/
+*.joblib
 lib/
 lib64/
 parts/
